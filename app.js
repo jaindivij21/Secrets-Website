@@ -5,6 +5,7 @@
 const express = require("express");
 const https = require("https");
 const mongoose = require("mongoose");
+const ejs = require("ejs");
 const _ = require("lodash");
 /* #endregion */
 
@@ -20,9 +21,63 @@ app.use(express.urlencoded({ extended: true }));
 //* MAIN
 
 //* Setup Database
+/* #region */
+
+const dbName = "userDB";
+// connect to the mongo service
+mongoose.connect(`mongodb://localhost:27017/${dbName}`);
+// make the schema and model to store the usernames and passwords
+const userSchema = {
+    email: String,
+    password: String,
+};
+const User = mongoose.model("User", userSchema);
+
+/* #endregion */
 
 //* Pages
 /* #region */
+
+// Home Route
+app.route("/").get((req, res) => {
+    res.render("home");
+});
+
+// Register Page
+app.route("/register")
+    .get((req, res) => {
+        res.render("register");
+    })
+    .post((req, res) => {
+        const newUser = new User({
+            email: req.body.username,
+            password: req.body.password,
+        });
+        newUser.save((err) => {
+            if (!err) res.render("secrets");
+            else console.log(err);
+        });
+    });
+
+// Login Page
+app.route("/login")
+    .get((req, res) => {
+        res.render("login");
+    })
+    .post((req, res) => {
+        const mail = req.body.username;
+        const pwd = req.body.password;
+        User.findOne({ email: mail }, (err, foundUser) => {
+            if (err) console.log(err);
+            else {
+                if (foundUser) {
+                    if (foundUser.password === pwd) {
+                        res.render("secrets");
+                    }
+                }
+            }
+        });
+    });
 
 // Listen to browser port
 app.listen(process.env.PORT || 3000, () => {
