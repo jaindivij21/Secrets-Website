@@ -7,7 +7,7 @@ const express = require("express");
 const https = require("https");
 const mongoose = require("mongoose");
 const ejs = require("ejs");
-const md5 = require("md5"); // strong hashing function : converts pwd into a hash which is irreversible.
+const bcrypt = require("bcrypt"); // strong hashing function : converts pwd into a hash which is irreversible.
 const _ = require("lodash");
 /* #endregion */
 
@@ -22,7 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 
 //* MAIN
 
-//* Setup Database
+//* Setup Database and Encryption
 /* #region */
 
 const dbName = "userDB";
@@ -35,6 +35,9 @@ const userSchema = new mongoose.Schema({
 });
 // make the model
 const User = mongoose.model("User", userSchema);
+
+//? Enabling Bcrypt Encryption with salting : https://www.npmjs.com/package/bcrypt
+const saltRounds = 10; // relevant with 2021
 
 /* #endregion */
 
@@ -52,13 +55,17 @@ app.route("/register")
         res.render("register");
     })
     .post((req, res) => {
-        const newUser = new User({
-            email: req.body.username,
-            password: md5(req.body.password),
-        });
-        newUser.save((err) => {
-            if (!err) res.render("secrets");
-            else console.log(err);
+        bcrypt.hash(req.body.password, saltRounds, (err, hash) => {
+            if (!err) {
+                const newUser = new User({
+                    email: req.body.username,
+                    password: hash,
+                });
+                newUser.save((err) => {
+                    if (!err) res.render("secrets");
+                    else console.log(err);
+                });
+            }
         });
     });
 
