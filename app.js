@@ -76,14 +76,16 @@ app.route("/login")
     })
     .post((req, res) => {
         const mail = req.body.username;
-        const pwd = md5(req.body.password);
+        const pwd = req.body.password;
         User.findOne({ email: mail }, (err, foundUser) => {
             if (err) console.log(err);
             else {
                 if (foundUser) {
-                    if (foundUser.password === pwd) {
-                        res.render("secrets");
-                    }
+                    bcrypt.compare(pwd, foundUser.password, (err, result) => {
+                        if (result === true) {
+                            res.render("secrets");
+                        }
+                    });
                 }
             }
         });
