@@ -6,6 +6,7 @@ const express = require("express");
 const https = require("https");
 const mongoose = require("mongoose");
 const ejs = require("ejs");
+const encrypt = require("mongoose-encryption"); // encrypt database data
 const _ = require("lodash");
 /* #endregion */
 
@@ -27,10 +28,14 @@ const dbName = "userDB";
 // connect to the mongo service
 mongoose.connect(`mongodb://localhost:27017/${dbName}`);
 // make the schema and model to store the usernames and passwords
-const userSchema = {
+const userSchema = new mongoose.Schema({
     email: String,
     password: String,
-};
+});
+// setup encryption
+const secret = "Thisisoursecret."; // secret key string
+userSchema.plugin(encrypt, { secret: secret, encryptedFields: ["password"] }); // specify the secret and the fields to be encrypted.
+// make the model
 const User = mongoose.model("User", userSchema);
 
 /* #endregion */
