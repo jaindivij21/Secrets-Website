@@ -12,6 +12,8 @@ const _ = require("lodash");
 const session = require("express-session"); // Session and Cookies
 const passport = require("passport"); // Authentication Tool
 const passportLocalMongoose = require("passport-local-mongoose");
+var findOrCreate = require("mongoose-findorcreate");
+const GoogleStrategy = require("passport-google-oauth20").Strategy; // Google OAuth
 
 /* #endregion */
 
@@ -41,28 +43,69 @@ app.use(passport.session());
 
 //* MAIN
 
-//* Setup Database and Encryption
+//* Setup Database
 /* #region */
 
 const dbName = "userDB";
 // connect to the mongo service
 mongoose.connect(`mongodb://${process.env.DB_HOST}:27017/${dbName}`);
-// make the schema and model to store the usernames and passwords
-const userSchema = new mongoose.Schema({
-    email: String,
-    password: String,
-});
 
+// get the schema
+const userSchema = require("./models/users");
+
+// Plugins
+userSchema.plugin(findOrCreate);
 //? https://www.npmjs.com/package/passport-local-mongoose
 userSchema.plugin(passportLocalMongoose);
 // make the model
 const User = mongoose.model("User", userSchema);
 
+/* #endregion */
+
+//* Cookies and Encryption
+/* #region */
+
 // Simplified PASSPORT by passport-local-mongoose : serialize/deserialize the user (cookies)
 //! Good Video Resource > https://youtu.be/W5Tb1MIeg-I?t=1006
 passport.use(User.createStrategy()); //? Can create your own strategy as well : https://youtu.be/W5Tb1MIeg-I?t=1006
-passport.serializeUser(User.serializeUser());
-passport.deserializeUser(User.deserializeUser());
+
+// sessions
+passport.serializeUser(function (user, done) {
+    done(null, user.id);
+});
+
+passport.deserializeUser(function (id, done) {
+    User.findById(id, function (err, user) {
+        done(err, user);
+    });
+});
+
+/* #endregion */
+
+//* Google OAuth Strategy and Initialization
+/* #region */
+
+//? http://www.passportjs.org/packages/passport-google-oauth20/
+passport.use(
+    new GoogleStrategy(
+        {
+            clientID: process.env.CLIENT_ID,
+            clientSecret: process.env.CLIENT_SECRET,
+            callbackURL: "http://localhost:3000/auth/google/secrets",
+        },
+        (accessToken, refreshToken, profile, cb) => {
+            // whatever was mentioned in scope is returned by profile
+            console.log(profile);
+            User.findOrCreate(
+                // find or create intakes 2 arguemnts, username and googleId to find a user in the database
+                { username: profile.emails[0].value, googleId: profile.id },
+                function (err, user) {
+                    return cb(err, user);
+                }
+            );
+        }
+    )
+);
 
 /* #endregion */
 
@@ -73,6 +116,21 @@ passport.deserializeUser(User.deserializeUser());
 app.route("/").get((req, res) => {
     res.render("home");
 });
+
+// Google OAuth Routes
+app.get(
+    "/auth/google",
+    passport.authenticate("google", { scope: ["profile", "email"] }) // scope tells what we want after authentication
+);
+app.get(
+    // authenticate locally and start a session
+    "/auth/google/secrets",
+    passport.authenticate("google", { failureRedirect: "/login" }),
+    (req, res) => {
+        // Successful authentication, redirect home.
+        res.redirect("/secrets");
+    }
+);
 
 // Register Route
 app.route("/register")
@@ -130,12 +188,40 @@ app.route("/logout").get((req, res) => {
 
 // Secrets main page
 app.route("/secrets").get((req, res) => {
-    if (req.isAuthenticated()) {
-        res.render("secrets");
-    } else {
-        res.redirect("/login");
-    }
+    User.find({ secret: { $ne: null } }, (err, foundUsers) => {
+        if (err) console.log(err);
+        else {
+            if (foundUsers) {
+                res.render("secrets", { usersWithSecrets: foundUsers });
+            }
+        }
+    });
 });
+
+// Submit Route
+app.route("/submit")
+    .get((req, res) => {
+        if (req.isAuthenticated()) {
+            res.render("submit");
+        } else {
+            res.redirect("/login");
+        }
+    })
+    .post((req, res) => {
+        const submittedSecret = req.body.secret; // store the user secret
+        // get the current user
+        User.findById(req.user.id, (err, foundUser) => {
+            if (err) console.log(err);
+            else {
+                if (foundUser) {
+                    foundUser.secret = submittedSecret;
+                    foundUser.save(() => {
+                        res.redirect("/secrets");
+                    });
+                }
+            }
+        });
+    });
 
 // Listen to browser port
 app.listen(process.env.PORT || 3000, () => {
