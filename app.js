@@ -2,6 +2,7 @@
 
 //* Requirements
 /* #region */
+require("dotenv").config(); // environment variable to store the secrets
 const express = require("express");
 const https = require("https");
 const mongoose = require("mongoose");
@@ -26,15 +27,17 @@ app.use(express.urlencoded({ extended: true }));
 
 const dbName = "userDB";
 // connect to the mongo service
-mongoose.connect(`mongodb://localhost:27017/${dbName}`);
+mongoose.connect(`mongodb://${process.env.DB_HOST}:27017/${dbName}`);
 // make the schema and model to store the usernames and passwords
 const userSchema = new mongoose.Schema({
     email: String,
     password: String,
 });
 // setup encryption
-const secret = "Thisisoursecret."; // secret key string
-userSchema.plugin(encrypt, { secret: secret, encryptedFields: ["password"] }); // specify the secret and the fields to be encrypted.
+userSchema.plugin(encrypt, {
+    secret: process.env.SECRET,
+    encryptedFields: ["password"],
+}); // specify the secret and the fields to be encrypted.
 // make the model
 const User = mongoose.model("User", userSchema);
 
